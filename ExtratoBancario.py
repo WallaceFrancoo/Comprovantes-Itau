@@ -20,8 +20,6 @@ def limpar_texto(texto):
     for termo in termos_irrelevantes:
         texto = texto.replace(termo, "")
     return texto.strip()
-
-
 def remover_ultima_linha(output_txt_path):
     # Lê todas as linhas do arquivo
     with open(output_txt_path, "r", encoding="utf-8") as file:
@@ -60,7 +58,6 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
     with open(pdf_path, "rb") as file:
         # Criar um leitor de PDF
         reader = PyPDF2.PdfReader(file)
-
         # Abrir o arquivo de texto para escrita
         with open(output_txt_path, "w", encoding="utf-8") as output_file:
             # Percorrer todas as páginas do PDF
@@ -68,11 +65,9 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                 # Extrair o texto da página atual
                 page = reader.pages[page_num]
                 texto = page.extract_text()
-
                 if texto:
                     # Dividir o texto por linhas
                     linhas = texto.split('\n')
-
                     for linha in linhas:
                         # Verifica se a linha contém o início da seção a ser processada
                         if "C = crédito a compensar" in linha:
@@ -81,24 +76,19 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                             continue
                         elif "Saldo em C/C" in linha:
                             print("Finalizando processamento de linhas.")
-
                             # Remover a última linha adicionada
                             if evento_atual:
                                 evento_atual.pop()  # Remove a última linha da lista de eventos
                             processar_linhas = False  # Parar o processamento
                             break
-
                         if processar_linhas:
                             # Remove os termos irrelevantes
                             linha = limpar_texto(linha)
-
                             # Verifica se a linha contém uma data
                             match_data = re.search(regex_data, linha)
-
                             if re.match(regex_ignorar_linha, linha):
                                 print(f"Ignorando linha: {linha}")
                                 continue  # Ignora a linha atual
-
                             # Se uma nova data é encontrada, ela é definida como data_atual
                                 # Se uma nova data é encontrada, ela é definida como data_atual
                             if match_data:
@@ -107,37 +97,31 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                                     data_atual = data_encontrada
                                     print(f"Data encontrada e atualizada: {data_atual}")
                                     continue  # Pular para a próxima linha
-
                             # Se a linha contém "SALDO APLIC AUT MAIS", ignora a linha
                             if "SALDO APLIC AUT MAIS" in linha:
                                 print(f"Ignorando a linha atual: {linha}")
                                 ignorar_proxima_linha = True  # Ignorar a próxima linha
                                 continue  # Continua o processamento
-
                             # Ignorar a próxima linha após "SALDO APLIC AUT MAIS"
                             if ignorar_proxima_linha:
                                 print(f"Ignorando a linha: {linha}")
                                 ignorar_proxima_linha = False  # Reseta a flag
                                 continue  # Ignora a linha atual
-
                             # Se a linha contém "mensal", remove a última linha e ignora até encontrar "(débitos)"
                             if "mensal" in linha:
                                 if evento_atual and ultima_linha:
                                     evento_atual.pop()  # Remove a última linha adicionada
                                 ignorar_linha_anterior = True  # Ativa a flag para ignorar até encontrar "(débitos)"
                                 continue  # Ignora a linha atual
-
                             # Se a linha contém "(débitos)", desativa a flag de ignorar
                             if "(débitos)" in linha:
                                 ignorar_linha_anterior = False
                                 print("Reiniciando a captura de eventos.")
                                 continue  # Ignora a linha atual
-
                             # Ignorar linhas se a flag ignorar_linha_anterior estiver ativa
                             if ignorar_linha_anterior:
                                 print(f"Ignorando linha devido a 'mensal': {linha}")
                                 continue  # Ignora a linha atual enquanto está ignorando
-
                             # Adiciona a linha aos eventos do dia atual, se não estiver vazia
                             if linha:
                                 # Se não há data atual, continuar para a próxima linha
@@ -148,7 +132,6 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                                 if linha == "-":
                                     print(f"Ignorando linha isolada com '-': {linha}")
                                     continue  # Ignora essa linha e passa para a próxima
-
                                 # Verifica se a linha atual é um valor
                                 if re.search(regex_valor, linha):
                                     # Se a última linha também for um valor, ignora a linha atual
@@ -188,32 +171,19 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                                         print(f"Linha adicionada: {linha_completa}")
                                         evento_atual.append(linha_completa)
                                         output_file.write(linha_completa + '\n')
-
                             # Atualiza a última linha processada
                             ultima_linha = linha
                             ultima_linha_com_valor = linha
-
                 # Após processar todas as linhas, verifica se ainda há eventos pendentes
                 if evento_atual and data_atual:
                     eventos_diarios.append({'Data': data_atual, 'Eventos': evento_atual})
-
     return eventos_diarios
-
-
 # Caminho para o arquivo PDF do extrato e arquivo TXT de saída
-pdf_path = "C:/Users/Wallace/Pictures/848/sergecont08.pdf"
-output_txt_path = "C:/Users/Wallace/Pictures/848/sergecont08.txt"
+pdf_path = "C:/Users/Wallace/Pictures/848/formigas.pdf"
+output_txt_path = "C:/Users/Wallace/Pictures/848/formigas.txt"
 
 # Extrair eventos por dia
 eventos = extrair_eventos_itau(pdf_path, output_txt_path)
 #remover_ultima_linha(output_txt_path)
 
 
-# Exibe os eventos por dia
-if eventos:
-    for evento in eventos:
-        print(f"Data: {evento['Data']}")
-        for e in evento['Eventos']:
-            print(f"  {e}")
-else:
-    print("Nenhum evento encontrado.")

@@ -200,6 +200,37 @@ def processar_comprovante_pagamento_qrcode(texto_pagina):
     linhadolancamento = f"Data: {data_transferencia}  | Valor: {valor_transferencia} | Recebedor: {nome_recebedor}"
     print(linhadolancamento)
     pass
+def processar_comprovante_pagamento_SEFAZ(texto_pagina):
+    # Seu código para processar "Comprovante de pagamento QR Code"
+    nome_recebedor = "Nome do recebedor não encontrado"
+    data_transferencia = "Data da transferência não encontrada"
+    valor_transferencia = "Valor não encontrado"
+
+    # Procurar nome
+    match_nome = re.search(r"identificação no extrato:\s*(.*?)\s*(identificação do comprovante:)", texto_pagina,
+                           re.DOTALL | re.IGNORECASE)
+    if match_nome:
+        nome_recebedor = match_nome.group(1).strip()
+
+    # Procurar a data da transferência
+    match_data = re.search(r"operação efetuada em\s*(.*?)\s*(às)", texto_pagina,
+                           re.DOTALL | re.IGNORECASE)
+    if match_data:
+        data_transferencia = match_data.group(1).strip()
+    # Procurar o valor
+    match_valor = re.search(r"valor:\s*(.*?)\s*(código de barras:)", texto_pagina,
+                            re.DOTALL | re.IGNORECASE)
+    if match_valor:
+        valor_transferencia = match_valor.group(1).strip()
+    else:
+        match_valor = re.search(r"valor da transação:\s*(.*?)\s*(descrição:)", texto_pagina,
+                                re.DOTALL | re.IGNORECASE)
+        if match_valor:
+            valor_transferencia = match_valor.group(1).strip()
+
+    linhadolancamento = f"Data: {data_transferencia}  | Valor: {valor_transferencia} | Recebedor: {nome_recebedor}"
+    print(linhadolancamento)
+    pass
 
 def verificar_pagina(texto_pagina):
     if "Comprovante de Transferência" in texto_pagina:
@@ -214,6 +245,8 @@ def verificar_pagina(texto_pagina):
         processar_comprovante_pagamento_qrcode(texto_pagina)
     elif "Comprovante de pagamento - simples nacional" in texto_pagina:
         processar_comprovante_pagamento_simples_nacional(texto_pagina)
+    elif "SEFAZ-SP/DARE - SEFAZ/SP - Via contribuinte" in texto_pagina:
+        processar_comprovante_pagamento_SEFAZ(texto_pagina)
     else:
         print("Nenhum comprovante reconhecido nesta página.")
 # Função para processar o arquivo PDF
@@ -224,6 +257,6 @@ def processar_arquivo_pdf(caminho_pdf):
         print(f"Processando página {i+1}")
         verificar_pagina(texto_pagina)
 # Exemplo de uso
-caminho_pdf = "C:/UserS/Wallace/Pictures/848/espiritos08C.pdf"
+caminho_pdf = "C:/UserS/Wallace/Pictures/848/sergecont08C.pdf"
 processar_arquivo_pdf(caminho_pdf)
 
