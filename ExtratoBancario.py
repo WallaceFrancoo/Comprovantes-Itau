@@ -32,6 +32,7 @@ def remover_ultima_linha(output_txt_path):
     # Reescreve o arquivo sem a última linha
     with open(output_txt_path, "w", encoding="utf-8") as file:
         file.writelines(linhas)
+
 def extrair_eventos_itau(pdf_path, output_txt_path):
     eventos_diarios = []
     data_atual = None
@@ -41,6 +42,12 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
     ignorar_linha_anterior = False  # Flag para ignorar a linha anterior até "(débitos)"
     ultima_linha = None  # Armazena a última linha processada
     ultima_linha_com_valor = None  # Variável para armazenar a última linha com valor
+    linhaAtual = 1
+    TData = ''
+    THistorico = ''
+    TValor = ''
+
+
 
     # Regex para identificar valores e datas
     regex_valor = r'^-?\d{1,3}(?:\.\d{3})*(?:,\d{2})?$'
@@ -68,6 +75,8 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                 if texto:
                     # Dividir o texto por linhas
                     linhas = texto.split('\n')
+                    mes_ano = linhas[3]
+                    _, ano = mes_ano.split()
                     for linha in linhas:
                         # Verifica se a linha contém o início da seção a ser processada
                         if "C = crédito a compensar" in linha:
@@ -93,7 +102,7 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                                 # Se uma nova data é encontrada, ela é definida como data_atual
                             if match_data:
                                 data_encontrada = match_data.group(0)
-                                if validar_data(data_encontrada):
+                                if validar_data(data_encontrada) and linha.strip() == data_encontrada:
                                     data_atual = data_encontrada
                                     print(f"Data encontrada e atualizada: {data_atual}")
                                     continue  # Pular para a próxima linha
@@ -124,53 +133,138 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                                 continue  # Ignora a linha atual enquanto está ignorando
                             # Adiciona a linha aos eventos do dia atual, se não estiver vazia
                             if linha:
-                                # Se não há data atual, continuar para a próxima linha
-                                if not data_atual:
-                                    print(f"Sem data definida, pulando linha: {linha}")
-                                    continue
-                                # Verifica se a linha contém um sinal de menos isolado
-                                if linha == "-":
-                                    print(f"Ignorando linha isolada com '-': {linha}")
-                                    continue  # Ignora essa linha e passa para a próxima
-                                # Verifica se a linha atual é um valor
-                                if re.search(regex_valor, linha):
-                                    # Se a última linha também for um valor, ignora a linha atual
-                                    if ultima_linha and re.search(regex_valor, ultima_linha):
+                                if linhaAtual % 2 == 0: # é par
+                                    # Se não há data atual, continuar para a próxima linha
+                                    if not data_atual:
+                                        print(f"Sem data definida, pulando linha: {linha}")
+                                        continue
+                                    # Verifica se a linha contém um sinal de menos isolado
+                                    if linha == "-":
+                                        print(f"Ignorando linha isolada com '-': {linha}")
+                                        continue  # Ignora essa linha e passa para a próxima
+                                    # Verifica se a linha atual é um valor
+                                    if re.search(regex_valor, linha):
+                                        # Se a última linha também for um valor, ignora a linha atual
+                                        if ultima_linha and re.search(regex_valor, ultima_linha):
+                                                # Ignora o valor se a última linha foi um valor positivo
+                                                print(f"Ignorando a linha atual (valor após outro valor): {linha}")
+                                                continue
+                                        else:
+                                            if ultima_linha_com_valor and ultima_linha_com_valor.endswith('-'):
+                                                # Se a última linha tinha um traço, essa linha é ignorada
+                                                print(f"Ignorando a linha atual (valor após outro valor com '-'): {linha}")
+                                                ultima_linha_com_valor = None  # Reseta após ignorar a linha
+                                                continue
+                                            else:
+                                                # Adiciona a linha atual, mantendo a data se válida
+                                                linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                                print(f"Linha adicionada com valor: {linha_completa}")
+                                                evento_atual.append(linha_completa)
+                                                TValor = linha_completa[5:]
+                                                #output_file.write(' |' + linha_completa[5:] + '\n') # Valor Positivo
+                                                linhaAtual = linhaAtual + 1
+                                    else:
+                                        # Verifica se a linha é uma descrição (não um valor)
+                                        if "TRANSF" in linha or "PIX" in linha:  # Adicione outras palavras-chave conforme necessário
+                                            # Adiciona a linha de descrição
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada como descrição: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            #output_file.write(linha_completa[:5] +'/' +ano +' |'+ linha_completa[5:]) # Historico
+                                            linhaAtual = linhaAtual + 1
+
+                                        elif data_atual and re.search(regex_data, linha):
+                                            # Retira a data da linha e a mantém
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            #output_file.write(linha_completa[:5] +'/' +ano +' |'+ linha_completa[5:])
+                                            linhaAtual = linhaAtual + 1
+
+                                        elif "-" in linha and "," in linha:
+                                            # Caso não tenha uma data, apenas adiciona a linha normal
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada com valor negativo: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            TValor = linha_completa[5:-1]
+                                            #output_file.write(' |' + linha_completa[5:-1] + '\n') # Valor Negativo
+                                            linhaAtual = linhaAtual + 1
+                                        else:
+                                            # Caso não tenha uma data, apenas adiciona a linha normal
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            #output_file.write(linha_completa[:5] +'/' +ano +' |'+ linha_completa[5:])
+                                            linhaAtual = linhaAtual + 1
+                                    output_file.write(TData + "/" + ano+' |' + TValor + ' |' + THistorico+ '\n') # O HISTORICO ESTÁ AQUI
+                                else: # é impar
+                                    # Se não há data atual, continuar para a próxima linha
+                                    if not data_atual:
+                                        print(f"Sem data definida, pulando linha: {linha}")
+                                        continue
+                                    # Verifica se a linha contém um sinal de menos isolado
+                                    if linha == "-":
+                                        print(f"Ignorando linha isolada com '-': {linha}")
+                                        continue  # Ignora essa linha e passa para a próxima
+                                    # Verifica se a linha atual é um valor
+                                    if re.search(regex_valor, linha):
+                                        # Se a última linha também for um valor, ignora a linha atual
+                                        if ultima_linha and re.search(regex_valor, ultima_linha):
                                             # Ignora o valor se a última linha foi um valor positivo
                                             print(f"Ignorando a linha atual (valor após outro valor): {linha}")
                                             continue
-                                    else:
-                                        if ultima_linha_com_valor and ultima_linha_com_valor.endswith('-'):
-                                            # Se a última linha tinha um traço, essa linha é ignorada
-                                            print(f"Ignorando a linha atual (valor após outro valor com '-'): {linha}")
-                                            ultima_linha_com_valor = None  # Reseta após ignorar a linha
-                                            continue
                                         else:
-                                            # Adiciona a linha atual, mantendo a data se válida
-                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
-                                            print(f"Linha adicionada com valor: {linha_completa}")
-                                            evento_atual.append(linha_completa)
-                                            output_file.write(linha_completa + '\n')
-                                else:
-                                    # Verifica se a linha é uma descrição (não um valor)
-                                    if "TRANSF" in linha or "PIX" in linha:  # Adicione outras palavras-chave conforme necessário
-                                        # Adiciona a linha de descrição
-                                        linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
-                                        print(f"Linha adicionada como descrição: {linha_completa}")
-                                        evento_atual.append(linha_completa)
-                                        output_file.write(linha_completa + '\n')
-                                    elif data_atual and re.search(regex_data, linha):
-                                        # Retira a data da linha e a mantém
-                                        linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
-                                        print(f"Linha adicionada: {linha_completa}")
-                                        evento_atual.append(linha_completa)
-                                        output_file.write(linha_completa + '\n')
+                                            if ultima_linha_com_valor and ultima_linha_com_valor.endswith('-'):
+                                                # Se a última linha tinha um traço, essa linha é ignorada
+                                                print(
+                                                    f"Ignorando a linha atual (valor após outro valor com '-'): {linha}")
+                                                ultima_linha_com_valor = None  # Reseta após ignorar a linha
+                                                continue
+                                            else:
+                                                # Adiciona a linha atual, mantendo a data se válida
+                                                linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                                print(f"Linha adicionada com valor: {linha_completa}")
+                                                evento_atual.append(linha_completa)
+                                                #output_file.write(' |' + linha_completa[5:] + '\n')  # Valor Positivo
+                                                linhaAtual = linhaAtual + 1
+
                                     else:
-                                        # Caso não tenha uma data, apenas adiciona a linha normal
-                                        linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
-                                        print(f"Linha adicionada: {linha_completa}")
-                                        evento_atual.append(linha_completa)
-                                        output_file.write(linha_completa + '\n')
+                                        # Verifica se a linha é uma descrição (não um valor)
+                                        if "TRANSF" in linha or "PIX" in linha:  # Adicione outras palavras-chave conforme necessário
+                                            # Adiciona a linha de descrição
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada como descrição: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            TData = linha_completa[:5]
+                                            THistorico = linha_completa[5:]
+                                            #output_file.write(linha_completa[:5] + '/' + ano + ' |' + linha_completa[5:])  # Historico
+                                            linhaAtual = linhaAtual + 1
+                                        elif data_atual and re.search(regex_data, linha):
+                                            # Retira a data da linha e a mantém
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            TData = linha_completa[:5]
+                                            THistorico = linha_completa[5:]
+                                            # output_file.write(linha_completa[:5] + '/' + ano + ' |' + linha_completa[5:])  # Historico
+                                            linhaAtual = linhaAtual + 1
+                                        elif "-" in linha and "," in linha:
+                                            # Caso não tenha uma data, apenas adiciona a linha normal
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada com valor negativo: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            output_file.write(' |' + linha_completa[5:-1] + '\n')  # Valor Negativo
+                                            linhaAtual = linhaAtual + 1
+                                        else:
+                                            # Caso não tenha uma data, apenas adiciona a linha normal
+                                            linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
+                                            print(f"Linha adicionada: {linha_completa}")
+                                            evento_atual.append(linha_completa)
+                                            TData = linha_completa[:5]
+                                            THistorico = linha_completa[5:]
+                                            # output_file.write(linha_completa[:5] + '/' + ano + ' |' + linha_completa[5:])  # Historico
+                                            linhaAtual = linhaAtual + 1
+
                             # Atualiza a última linha processada
                             ultima_linha = linha
                             ultima_linha_com_valor = linha
@@ -179,11 +273,9 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                     eventos_diarios.append({'Data': data_atual, 'Eventos': evento_atual})
     return eventos_diarios
 # Caminho para o arquivo PDF do extrato e arquivo TXT de saída
-pdf_path = "C:/Users/Wallace/Pictures/848/formigas.pdf"
-output_txt_path = "C:/Users/Wallace/Pictures/848/formigas.txt"
+pdf_path = "C:/Users/Wallace/Pictures/848/MGS.pdf"
+output_txt_path = "C:/Users/Wallace/Pictures/848/MGS.txt"
 
 # Extrair eventos por dia
 eventos = extrair_eventos_itau(pdf_path, output_txt_path)
 #remover_ultima_linha(output_txt_path)
-
-
