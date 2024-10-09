@@ -1,5 +1,6 @@
 import PyPDF2
 import re
+import BancoDeDados
 
 # Lista de termos irrelevantes que devem ser removidos
 termos_irrelevantes = [
@@ -31,13 +32,25 @@ def remover_ultima_linha(output_txt_path):
     # Reescreve o arquivo sem a última linha
     with open(output_txt_path, "w", encoding="utf-8") as file:
         file.writelines(linhas)
-def gerarLinhaTXT(arquivo, TData, ano, TValor, THistorico):
-    return arquivo.write(TData + "/" + ano + ' |' + TValor + ' |' + THistorico + '\n')  # O HISTORICO ESTÁ AQUI
+def contraPartida(historico):
+    conta = BancoDeDados.consultarHistorico(historico)
+    return conta
+def gerarLinhaTXT(arquivo, TData, ano, TValor, THistorico,TContra):
+
+    if TContra == 'saida':
+        Debito = contraPartida(THistorico)
+        Credito = '536'
+    elif TContra == 'entrada':
+        Debito = '536'
+        Credito = contraPartida(THistorico)
+
+    valorConvertido = TValor[1:].replace(".","")
+
+    return arquivo.write(TData + "/" + ano + '|' + Debito +'|'+Credito+ '|' + valorConvertido + '|' + THistorico[1:] + '|' +'\n')  # O HISTORICO ESTÁ AQUI
 def verificarTRANSFouPIX(linha, data_atual, regex_data, ano, evento_atual, output_file):
     if "TRANSF" in linha or "PIX" in linha:  # Adicione outras palavras-chave conforme necessário
         # Adiciona a linha de descrição
         linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
-        print(f"Linha adicionada como descrição: {linha_completa}")
         evento_atual.append(linha_completa)
         TData = linha_completa[:5]
         THistorico = linha_completa[5:]
@@ -45,7 +58,6 @@ def verificarTRANSFouPIX(linha, data_atual, regex_data, ano, evento_atual, outpu
     elif data_atual and re.search(regex_data, linha):
         # Retira a data da linha e a mantém
         linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
-        print(f"Linha adicionada: {linha_completa}")
         evento_atual.append(linha_completa)
         TData = linha_completa[:5]
         THistorico = linha_completa[5:]
@@ -53,7 +65,6 @@ def verificarTRANSFouPIX(linha, data_atual, regex_data, ano, evento_atual, outpu
     elif "-" in linha and "," in linha:
         # Caso não tenha uma data, apenas adiciona a linha normal
         linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
-        print(f"Linha adicionada com valor negativo: {linha_completa}")
         evento_atual.append(linha_completa)
         output_file.write(' |' + linha_completa[5:-1] + '\n')  # Valor Negativo
     else:
@@ -71,6 +82,7 @@ def valorNegativo(linha,data_atual,evento_atual,linhaAtual):
         linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
         evento_atual.append(linha_completa)
         TValor = linha_completa[5:-1]
+        TContra = 'saida'
         # output_file.write(' |' + linha_completa[5:-1] + '\n') # Valor Negativo
     else:
         # Caso não tenha uma data, apenas adiciona a linha normal
@@ -78,15 +90,16 @@ def valorNegativo(linha,data_atual,evento_atual,linhaAtual):
         evento_atual.append(linha_completa)
         # output_file.write(linha_completa[:5] +'/' +ano +' |'+ linha_completa[5:])
 
-    return TValor
+    return TValor, TContra
 def valorPositivo(linha,data_atual, evento_atual,linhaAtual):
     # Adiciona a linha atual, mantendo a data se válida
     linha_completa = f"{data_atual + ' ' if data_atual else ''}{linha}"
     evento_atual.append(linha_completa)
     TValor = linha_completa[5:]
+    TContra =  'entrada'
     # output_file.write(' |' + linha_completa[5:] + '\n') # Valor Positivo
 
-    return TValor
+    return TValor, TContra
 def extrair_eventos_itau(pdf_path, output_txt_path):
     eventos_diarios = []
     data_atual = None
@@ -139,7 +152,8 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                         elif "Saldo em C/C" in linha:
                             if evento_atual:
                                 evento_atual.pop()  # Remove a última linha da lista de eventos
-                            processar_linhas = False  # Parar o processamento
+                            processar_linhas = False
+                            print(f"Finalizando o processamento!\nForam Gerados um total de {str((linhaAtual-1)/2)} Linhas")# Parar o processamento
                             break
                         if processar_linhas:
                             linha = limpar_texto(linha) # Remove os termos irrelevantes
@@ -152,7 +166,8 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                                     data_atual = data_encontrada
                                     continue  # Pular para a próxima linha
                             # Se a linha contém "SALDO APLIC AUT MAIS", ignora a linha
-                            if "SALDO APLIC AUT MAIS" in linha:
+                            if any(substring in linha for substring in
+                                   ["SALDO APLIC AUT MAIS", "Saldo final devedor", "(-) Saldo a liberar"]):
                                 ignorar_proxima_linha = True  # Ignorar a próxima linha
                                 continue  # Continua o processamento
                             # Ignorar a próxima linha após "SALDO APLIC AUT MAIS"
@@ -191,12 +206,12 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
                                                 ultima_linha_com_valor = None  # Reseta após ignorar a linha
                                                 continue
                                             else:
-                                                TValor = valorPositivo(linha,data_atual,evento_atual,linhaAtual)
+                                                TValor, TContra = valorPositivo(linha,data_atual,evento_atual,linhaAtual)
                                                 linhaAtual = linhaAtual + 1
                                     else:
-                                        TValor = valorNegativo(linha,data_atual,evento_atual,linhaAtual)
+                                        TValor, TContra = valorNegativo(linha,data_atual,evento_atual,linhaAtual)
                                         linhaAtual = linhaAtual + 1
-                                    gerarLinhaTXT(output_file,TData,ano,TValor,THistorico)
+                                    gerarLinhaTXT(output_file,TData,ano,TValor,THistorico,TContra)
                                 else:  # é impar
                                     # Se não há data atual, continuar para a próxima linha
                                     if not data_atual:
@@ -234,8 +249,8 @@ def extrair_eventos_itau(pdf_path, output_txt_path):
 
 
 # Caminho para o arquivo PDF do extrato e arquivo TXT de saída
-pdf_path = "C:/Users/Wallace/Pictures/848/jnw.pdf"
-output_txt_path = "C:/Users/Wallace/Pictures/848/jnw2.txt"
+pdf_path = "C:/Users/Wallace/Pictures/848/Artemobi.pdf"
+output_txt_path = "C:/Users/Wallace/Pictures/848/Artemobi.txt"
 
 # Extrair eventos por dia
 eventos = extrair_eventos_itau(pdf_path, output_txt_path)
